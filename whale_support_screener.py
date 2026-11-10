@@ -1,4 +1,6 @@
-"""
+            r = requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+                              json={"chat_id": CHAT_ID, "text": text[i:i + 3800], "parse_mode": "Markdown"}, timeout=15)
+            print("Telegram:", r.status_code, r.text[:200])"""
 Binance USDT screener v1
 1) [blackcat] Whale Pump (sariq sham) - 15m, 4h, 1d
 2) Support zonasida turgan coinlar - 15m, 4h, 1d
@@ -273,8 +275,9 @@ def telegram(text):
         return
     for i in range(0, len(text), 3800):
         try:
-            requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-                          json={"chat_id": CHAT_ID, "text": text[i:i + 3800], "parse_mode": "Markdown"}, timeout=15)
+            r = requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+                              json={"chat_id": CHAT_ID, "text": text[i:i + 3800], "parse_mode": "Markdown"}, timeout=15)
+            print("Telegram:", r.status_code, r.text[:200])
         except Exception as e:
             print("Telegram xato:", e)
 
