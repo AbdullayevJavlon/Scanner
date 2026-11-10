@@ -314,7 +314,7 @@ def sleep_to_next_15m():
     nxt = (int(now // 900) + 1) * 900 + 8
     time.sleep(max(nxt - now, 1))
 
-
+telegram("✅ Test: skaner ishlayapti")
 if __name__ == "__main__":
     cycle()
     if os.getenv("RUN_ONCE"):
