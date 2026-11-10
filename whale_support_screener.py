@@ -67,9 +67,6 @@ BOT_TOKEN = _secret("TG_BOT_TOKEN").strip().strip('"').strip("'")
 if BOT_TOKEN.lower().startswith("bot"):
     BOT_TOKEN = BOT_TOKEN[3:]
 CHAT_ID = _secret("TG_CHAT_ID").strip()
-print("TOKEN:", len(BOT_TOKEN), BOT_TOKEN[:10], "| CHAT_ID:", CHAT_ID)
-print("TOKEN oxiri:", BOT_TOKEN[-6:])
-print("getMe:", requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getMe", timeout=15).text[:120])
 
 
 # =========================== BINANCE ===========================
@@ -314,7 +311,6 @@ def sleep_to_next_15m():
     nxt = (int(now // 900) + 1) * 900 + 8
     time.sleep(max(nxt - now, 1))
 
-telegram("✅ Test: skaner ishlayapti")
 if __name__ == "__main__":
     cycle()
     if os.getenv("RUN_ONCE"):
