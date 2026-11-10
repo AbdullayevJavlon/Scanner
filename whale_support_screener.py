@@ -34,8 +34,8 @@ SUP_BREAK_PCT = 0.3
 # --- Hajm va sdelka ---
 SURGE_TF = "15m"
 SURGE_BASE = 20
-VOL_X = 2.0
-TRD_X = 2.0
+VOL_X = 1.5
+TRD_X = 1.5
 
 # --- Alert sharti ---
 MIN_YELLOW_TF = 1
