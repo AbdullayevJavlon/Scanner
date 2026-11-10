@@ -68,6 +68,8 @@ if BOT_TOKEN.lower().startswith("bot"):
     BOT_TOKEN = BOT_TOKEN[3:]
 CHAT_ID = _secret("TG_CHAT_ID").strip()
 print("TOKEN:", len(BOT_TOKEN), BOT_TOKEN[:10], "| CHAT_ID:", CHAT_ID)
+print("TOKEN oxiri:", BOT_TOKEN[-6:])
+print("getMe:", requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getMe", timeout=15).text[:120])
 
 
 # =========================== BINANCE ===========================
