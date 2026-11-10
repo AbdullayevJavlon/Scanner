@@ -63,8 +63,11 @@ def _secret(name):
         return ""
 
 
-BOT_TOKEN = _secret("TG_BOT_TOKEN")
-CHAT_ID = _secret("TG_CHAT_ID")
+BOT_TOKEN = _secret("TG_BOT_TOKEN").strip().strip('"').strip("'")
+if BOT_TOKEN.lower().startswith("bot"):
+    BOT_TOKEN = BOT_TOKEN[3:]
+CHAT_ID = _secret("TG_CHAT_ID").strip()
+print("TOKEN:", len(BOT_TOKEN), BOT_TOKEN[:10], "| CHAT_ID:", CHAT_ID)
 
 
 # =========================== BINANCE ===========================
