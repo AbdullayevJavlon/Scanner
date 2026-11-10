@@ -1,14 +1,9 @@
-            r = requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-                              json={"chat_id": CHAT_ID, "text": text[i:i + 3800], "parse_mode": "Markdown"}, timeout=15)
-            print("Telegram:", r.status_code, r.text[:200])"""
+"""
 Binance USDT screener v1
 1) [blackcat] Whale Pump (sariq sham) - 15m, 4h, 1d
 2) Support zonasida turgan coinlar - 15m, 4h, 1d
 3) Hajm + sdelkalar soni oshishi - 15m
 Telegram alert, har 15 minutda (sham yopilgandan keyin).
-
-Colab: pip install requests pandas numpy
-Telegram: TG_BOT_TOKEN va TG_CHAT_ID ni Colab "Secrets" ga (kalit belgisi) qo'shing.
 """
 import os
 import time
@@ -21,40 +16,38 @@ from datetime import datetime, timezone
 # =========================== SOZLAMALAR ===========================
 TFS = ["15m", "4h", "1d"]
 
-TOP_N = 150                    # 24s hajm bo'yicha eng katta N ta USDT juftlik
-MIN_QUOTE_VOL_24H = 3_000_000  # 24s hajmi shundan kam coinlar olinmaydi (USDT)
+TOP_N = 150
+MIN_QUOTE_VOL_24H = 3_000_000
 
 # --- Whale Pump (sariq sham) ---
-WHALE_MIN = 1.0       # shu qiymatdan katta bo'lsa "sariq sham" deymiz (TradingView bilan solishtirib sozlang)
-WHALE_LOOKBACK = 1    # oxirgi nechta YOPILGAN shamda sariq sham qidiriladi (1 = faqat oxirgisi)
+WHALE_MIN = 1.0
+WHALE_LOOKBACK = 1
 
 # --- Support ---
 PIVOT_LEFT = 5
 PIVOT_RIGHT = 5
-CLUSTER_PCT = 0.6                                  # shu % ichidagi pivotlar bitta zona
-MIN_TOUCHES = 2                                    # zona kamida necha marta tegilgan
-SUP_TOL_PCT = {"15m": 0.5, "4h": 1.0, "1d": 1.5}   # narx zonadan shu % yuqorigacha bo'lsa "supportda"
-SUP_BREAK_PCT = 0.3                                # zonadan shu % pastga tushsa, support sinadi
+CLUSTER_PCT = 0.6
+MIN_TOUCHES = 2
+SUP_TOL_PCT = {"15m": 0.5, "4h": 1.0, "1d": 1.5}
+SUP_BREAK_PCT = 0.3
 
 # --- Hajm va sdelka ---
 SURGE_TF = "15m"
-SURGE_BASE = 20       # oxirgi 20 sham o'rtachasi bilan solishtiramiz
-VOL_X = 2.0           # hajm kamida shuncha baravar
-TRD_X = 2.0           # sdelkalar soni kamida shuncha baravar
+SURGE_BASE = 20
+VOL_X = 2.0
+TRD_X = 2.0
 
 # --- Alert sharti ---
-MIN_YELLOW_TF = 1     # kamida nechta taymfreymda sariq sham
-MIN_SUPPORT_TF = 1    # kamida nechta taymfreymda support
-REQUIRE_SURGE = True  # hajm+sdelka oshishi shart
+MIN_YELLOW_TF = 1
+MIN_SUPPORT_TF = 1
+REQUIRE_SURGE = True
 
-DEBUG = False         # True: har coin uchun whale qiymatlarini chiqaradi (kalibrlash uchun)
+DEBUG = False
 
-# Chiqarib tashlanadigan coinlar (o'zingizdagi eski ro'yxatni shu yerga qo'shing)
 STABLES = {"USDC", "FDUSD", "TUSD", "USDP", "DAI", "USDE", "BUSD", "EUR", "AEUR", "XUSD", "USD1", "PYUSD", "RLUSD", "UST", "USTC", "EURI", "BFUSD"}
 STOCKS = {"TSLA", "AAPL", "NVDA", "COIN", "MSTR", "HOOD", "CRCL", "AMZN", "GOOGL", "META", "MSFT"}
 EXCLUDE = STABLES | STOCKS
 
-# Binance public ma'lumot manzillari (Colab AQSh serverida api.binance.com bloklanishi mumkin)
 BASES = ["https://data-api.binance.vision", "https://api.binance.com", "https://api1.binance.com"]
 
 
@@ -115,13 +108,12 @@ def get_klines(symbol, interval, limit=500):
     for c in ["open", "high", "low", "close", "volume", "quote_vol", "trades"]:
         df[c] = df[c].astype(float)
     now_ms = int(time.time() * 1000)
-    df = df[df["close_time"] < now_ms].reset_index(drop=True)  # faqat YOPILGAN shamlar
+    df = df[df["close_time"] < now_ms].reset_index(drop=True)
     return df
 
 
 # =========================== INDIKATOR: WHALE PUMP ===========================
 def xsa(src, length, wei):
-    """TDX SMA(X,N,M) - Pine'dagi xsa funksiyasining aynan nusxasi."""
     n = len(src)
     out = np.full(n, np.nan)
     sumf = np.zeros(n)
@@ -144,7 +136,7 @@ def ema(arr, span):
 def whale_pump(df, fast_len=38, base_len=90):
     low = df["low"].values
     var1 = np.roll(low, 1)
-    var1[0] = np.nan                                   # xrf(low,1) = oldingi sham low'i
+    var1[0] = np.nan
     up = np.maximum(low - var1, 0)
     num = xsa(np.abs(low - var1), 3, 1)
     den = xsa(up, 3, 1)
@@ -182,7 +174,6 @@ def find_support_zones(df):
 
 
 def check_support(df, tf):
-    """Qaytaradi: (supportdami, zona narxi, tegishlar soni, zonadan masofa %)"""
     zones = find_support_zones(df)
     c = df["close"].iloc[-1]
     lo = df["low"].iloc[-1]
@@ -295,7 +286,7 @@ def print_table(results):
     print(pd.DataFrame(rows).to_string(index=False))
 
 
-alerted = set()  # (symbol, 15m sham vaqti) - bir xil signalni qayta yubormaslik
+alerted = set()
 
 
 def cycle():
@@ -315,15 +306,15 @@ def cycle():
 
 def sleep_to_next_15m():
     now = time.time()
-    nxt = (int(now // 900) + 1) * 900 + 8   # sham yopilgandan 8 soniya keyin
+    nxt = (int(now // 900) + 1) * 900 + 8
     time.sleep(max(nxt - now, 1))
 
 
 if __name__ == "__main__":
-    cycle()                 # darrov bir marta
-    if os.getenv("RUN_ONCE"):   # GitHub Actions: bir marta ishlab to'xtaydi
+    cycle()
+    if os.getenv("RUN_ONCE"):
         raise SystemExit(0)
-    while True:             # keyin har 15 minutda
+    while True:
         sleep_to_next_15m()
         try:
             cycle()
