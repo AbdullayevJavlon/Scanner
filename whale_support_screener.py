@@ -1,8 +1,7 @@
 """
-Binance USDT screener v1
-1) [blackcat] Whale Pump (sariq sham) - 15m, 4h, 1d
-2) Support zonasida turgan coinlar - 15m, 4h, 1d
-3) Hajm + sdelkalar soni oshishi - 15m
+Binance USDT screener v2
+1) Asosiy alert: sariq sham + support + hajm (15m, 4h, 1d)
+2) Alohida alert: 15m da yangi sariq ustun paydo bo'lganda
 Telegram alert, har 15 minutda (sham yopilgandan keyin).
 """
 import os
@@ -37,14 +36,20 @@ SURGE_BASE = 20
 VOL_X = 1.5
 TRD_X = 1.5
 
-# --- Alert sharti ---
+# --- Asosiy alert sharti ---
 MIN_YELLOW_TF = 1
 MIN_SUPPORT_TF = 1
 REQUIRE_SURGE = True
 
+# --- Alohida alert: 15m da yangi sariq ustun ---
+FRESH15 = True
+WP15_MIN = 1.0     # ustun shu qiymatdan oshsa "paydo bo'ldi" deymiz
+WP15_MAX = 500     # bundan katta qiymat hisob xatosi, o'tkazib yuboriladi
+FRESH_TOP = 8      # bir xabarda ko'pi bilan nechta coin
+
 DEBUG = True
 
-STABLES = {"USDC", "FDUSD", "TUSD", "USDP", "DAI", "USDE", "BUSD", "EUR", "AEUR", "XUSD", "USD1", "PYUSD", "RLUSD", "UST", "USTC", "EURI", "BFUSD"}
+STABLES = {"U", "USDC", "FDUSD", "TUSD", "USDP", "DAI", "USDE", "BUSD", "EUR", "AEUR", "XUSD", "USD1", "PYUSD", "RLUSD", "UST", "USTC", "EURI", "BFUSD"}
 STOCKS = {"TSLA", "AAPL", "NVDA", "COIN", "MSTR", "HOOD", "CRCL", "AMZN", "GOOGL", "META", "MSFT"}
 EXCLUDE = STABLES | STOCKS
 
@@ -114,14 +119,14 @@ def get_klines(symbol, interval, limit=500):
     return df
 
 
-def day_change(symbol):
-    """Bugungi kunlik sham ochilishidan (00:00 UTC) hozirgacha o'zgarish, %."""
+def day_info(symbol):
+    """Qaytaradi: (hozirgi narx, bugungi kunlik sham ochilishidan o'zgarish %)."""
     try:
         k = api_get("/api/v3/klines", {"symbol": symbol, "interval": "1d", "limit": 1})[0]
         o, c = float(k[1]), float(k[4])
-        return (c / o - 1) * 100
+        return c, (c / o - 1) * 100
     except Exception:
-        return None
+        return None, None
 
 
 # =========================== INDIKATOR: WHALE PUMP ===========================
@@ -221,6 +226,9 @@ def scan_symbol(item):
             recent = wp[-WHALE_LOOKBACK:]
             res["whale"][tf] = float(np.nanmax(recent)) if len(recent) else 0.0
             res["yellow"][tf] = bool(res["whale"][tf] > WHALE_MIN)
+            if tf == "15m":
+                res["wp15"] = float(wp[-1])
+                res["wp15_prev"] = float(wp[-2])
             ok, level, touches, dist = check_support(df, tf)
             res["support"][tf] = (ok, level, touches, dist)
             res["rsi"][tf] = float(rsi(df["close"]).iloc[-1])
@@ -261,13 +269,23 @@ def passes(r):
     return True
 
 
+def is_fresh(r):
+    cur, prev = r.get("wp15"), r.get("wp15_prev")
+    if cur is None or prev is None or np.isnan(cur) or np.isnan(prev):
+        return False
+    return WP15_MIN <= cur <= WP15_MAX and prev < WP15_MIN
+
+
+def tv_link(sym):
+    return f"https://www.tradingview.com/chart/?symbol=BINANCE:{sym}"
+
+
 def fmt(r):
     ys = "".join(f"{tf} " for tf in TFS if r["yellow"].get(tf)) or "-"
     ss = "".join(f"{tf} " for tf in TFS if r["support"].get(tf, (False,))[0]) or "-"
     rsi4 = r["rsi"].get("4h")
-    ch = day_change(r["symbol"])
+    _, ch = day_info(r["symbol"])
     chs = f"{ch:+.1f}%" if ch is not None else "-"
-    link = f"https://www.tradingview.com/chart/?symbol=BINANCE:{r['symbol']}"
     txt = (f"*{r['base']}/USDT*  (ball {r['score']})\n"
            f"📈 kun: {chs}\n"
            f"🟡 sariq: {ys}\n"
@@ -275,8 +293,19 @@ def fmt(r):
            f"⚡ hajm x{r.get('vol_x', 0):.1f} | sdelka x{r.get('trd_x', 0):.1f}")
     if rsi4 is not None:
         txt += f"\nRSI 4h: {rsi4:.0f}"
-    txt += f"\n[📈 TradingView'da ko'rish]({link})"
+    txt += f"\n[📈 TradingView'da ko'rish]({tv_link(r['symbol'])})"
     return txt
+
+
+def fmt_fresh(r):
+    price, ch = day_info(r["symbol"])
+    ps = f"{price:.6g}" if price is not None else "-"
+    chs = f"{ch:+.1f}%" if ch is not None else "-"
+    return (f"*{r['base']}/USDT*\n"
+            f"💰 narx: {ps}\n"
+            f"📈 kun: {chs}\n"
+            f"🟡 15m ustun: {r['wp15']:.2f}\n"
+            f"[📈 TradingView'da ko'rish]({tv_link(r['symbol'])})")
 
 
 def telegram(text):
@@ -312,6 +341,8 @@ alerted = set()
 def cycle():
     results = run_scan()
     print_table(results)
+
+    # 1) asosiy alert
     hits = [r for r in results if passes(r)]
     new = [r for r in hits if (r["symbol"], r.get("candle_time")) not in alerted]
     for r in new:
@@ -322,6 +353,20 @@ def cycle():
         telegram(head + "\n\n".join(fmt(r) for r in new))
     else:
         print("Yangi signal yo'q.")
+
+    # 2) alohida alert: 15m da yangi sariq ustun
+    if FRESH15:
+        fresh = [r for r in results
+                 if is_fresh(r) and (r["symbol"], "wp15", r.get("candle_time")) not in alerted]
+        fresh.sort(key=lambda x: -x["wp15"])
+        fresh = fresh[:FRESH_TOP]
+        for r in fresh:
+            alerted.add((r["symbol"], "wp15", r.get("candle_time")))
+        if fresh:
+            head = f"🟡 Yangi ustun (15m) | {len(fresh)} ta\n\n"
+            telegram(head + "\n\n".join(fmt_fresh(r) for r in fresh))
+        else:
+            print("Yangi ustun yo'q.")
 
 
 def sleep_to_next_15m():
