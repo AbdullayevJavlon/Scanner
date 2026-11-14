@@ -1,7 +1,7 @@
 """
-Binance USDT screener v2
+Binance USDT screener v3
 1) Asosiy alert: sariq sham + support + hajm (15m, 4h, 1d)
-2) Alohida alert: 15m da yangi sariq ustun paydo bo'lganda
+2) Alohida alert: 15m da ketma-ket FRESH_N-sariq ustun
 Telegram alert, har 15 minutda (sham yopilgandan keyin).
 """
 import os
@@ -15,8 +15,8 @@ from datetime import datetime, timezone
 # =========================== SOZLAMALAR ===========================
 TFS = ["15m", "4h", "1d"]
 
-TOP_N = 150
-MIN_QUOTE_VOL_24H = 3_000_000
+TOP_N = 400
+MIN_QUOTE_VOL_24H = 500_000
 
 # --- Whale Pump (sariq sham) ---
 WHALE_MIN = 1.0
@@ -41,15 +41,16 @@ MIN_YELLOW_TF = 1
 MIN_SUPPORT_TF = 1
 REQUIRE_SURGE = True
 
-# --- Alohida alert: 15m da yangi sariq ustun ---
+# --- Alohida alert: 15m da ketma-ket sariq ustunlar ---
 FRESH15 = True
-WP15_MIN = 1.0     # ustun shu qiymatdan oshsa "paydo bo'ldi" deymiz
-WP15_MAX = 500     # bundan katta qiymat hisob xatosi, o'tkazib yuboriladi
+WP15_MIN = 1.0     # ustun shu qiymatdan oshsa "sariq ustun" deymiz
+WP15_MAX = 500     # bundan katta qiymat hisob xatosi
+FRESH_N = 5        # nechanchi ketma-ket ustunda xabar beradi
 FRESH_TOP = 8      # bir xabarda ko'pi bilan nechta coin
 
 DEBUG = True
 
-STABLES = {"U", "USDC", "FDUSD", "TUSD", "USDP", "DAI", "USDE", "BUSD", "EUR", "AEUR", "XUSD", "USD1", "PYUSD", "RLUSD", "UST", "USTC", "EURI", "BFUSD"}
+STABLES = {"U", "XAUT", "PAXG", "USDC", "FDUSD", "TUSD", "USDP", "DAI", "USDE", "BUSD", "EUR", "AEUR", "XUSD", "USD1", "PYUSD", "RLUSD", "UST", "USTC", "EURI", "BFUSD"}
 STOCKS = {"TSLA", "AAPL", "NVDA", "COIN", "MSTR", "HOOD", "CRCL", "AMZN", "GOOGL", "META", "MSFT"}
 EXCLUDE = STABLES | STOCKS
 
@@ -227,8 +228,13 @@ def scan_symbol(item):
             res["whale"][tf] = float(np.nanmax(recent)) if len(recent) else 0.0
             res["yellow"][tf] = bool(res["whale"][tf] > WHALE_MIN)
             if tf == "15m":
+                streak = 0
+                for v in wp[::-1]:
+                    if np.isnan(v) or v < WP15_MIN or v > WP15_MAX:
+                        break
+                    streak += 1
                 res["wp15"] = float(wp[-1])
-                res["wp15_prev"] = float(wp[-2])
+                res["wp15_streak"] = streak
             ok, level, touches, dist = check_support(df, tf)
             res["support"][tf] = (ok, level, touches, dist)
             res["rsi"][tf] = float(rsi(df["close"]).iloc[-1])
@@ -270,10 +276,7 @@ def passes(r):
 
 
 def is_fresh(r):
-    cur, prev = r.get("wp15"), r.get("wp15_prev")
-    if cur is None or prev is None or np.isnan(cur) or np.isnan(prev):
-        return False
-    return WP15_MIN <= cur <= WP15_MAX and prev < WP15_MIN
+    return r.get("wp15_streak", 0) == FRESH_N
 
 
 def tv_link(sym):
@@ -304,7 +307,7 @@ def fmt_fresh(r):
     return (f"*{r['base']}/USDT*\n"
             f"💰 narx: {ps}\n"
             f"📈 kun: {chs}\n"
-            f"🟡 15m ustun: {r['wp15']:.2f}\n"
+            f"🟡 15m: {FRESH_N}-ustun ({r['wp15']:.2f})\n"
             f"[📈 TradingView'da ko'rish]({tv_link(r['symbol'])})")
 
 
@@ -341,6 +344,8 @@ alerted = set()
 def cycle():
     results = run_scan()
     print_table(results)
+    seq = [f"{r['base']} {r['wp15_streak']}" for r in results if r.get("wp15_streak", 0) >= 1]
+    print("15m ustun seriyalari:", ", ".join(seq) or "yo'q")
 
     # 1) asosiy alert
     hits = [r for r in results if passes(r)]
@@ -354,7 +359,7 @@ def cycle():
     else:
         print("Yangi signal yo'q.")
 
-    # 2) alohida alert: 15m da yangi sariq ustun
+    # 2) alohida alert: 15m da ketma-ket FRESH_N-ustun
     if FRESH15:
         fresh = [r for r in results
                  if is_fresh(r) and (r["symbol"], "wp15", r.get("candle_time")) not in alerted]
@@ -363,7 +368,7 @@ def cycle():
         for r in fresh:
             alerted.add((r["symbol"], "wp15", r.get("candle_time")))
         if fresh:
-            head = f"🟡 Yangi ustun (15m) | {len(fresh)} ta\n\n"
+            head = f"🟡 15m seriya: {FRESH_N}-ustun | {len(fresh)} ta\n\n"
             telegram(head + "\n\n".join(fmt_fresh(r) for r in fresh))
         else:
             print("Yangi ustun yo'q.")
